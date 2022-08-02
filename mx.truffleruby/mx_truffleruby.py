@@ -29,10 +29,7 @@ def add_ext_suffix(name):
     """
     Adds the platform specific C extension suffix to a name
     """
-    if mx.is_darwin():
-        return name + '.bundle'
-    else:
-        return name + '.so'
+    return f'{name}.bundle' if mx.is_darwin() else f'{name}.so'
 
 mx_subst.results_substitutions.register_with_arg('extsuffix', add_ext_suffix)
 
@@ -66,7 +63,7 @@ class TruffleRubyBootstrapLauncherProject(mx.Project):
 
 class TruffleRubyBootstrapLauncherBuildTask(mx.BuildTask):
     def __str__(self):
-        return "Generating " + self.subject.name
+        return f"Generating {self.subject.name}"
 
     def newestOutput(self):
         return mx.TimeStampFile.newest([result for result, _, _ in self.subject.launchers()])
@@ -78,11 +75,11 @@ class TruffleRubyBootstrapLauncherBuildTask(mx.BuildTask):
 
         for result, _, _ in self.subject.launchers():
             if not exists(result):
-                return True, result + ' does not exist'
+                return True, f'{result} does not exist'
             with open(result, "r") as f:
                 on_disk = f.read()
             if on_disk != self.contents(result):
-                return True, 'command line changed for ' + basename(result)
+                return True, f'command line changed for {basename(result)}'
 
         return False, 'up to date'
 
@@ -101,16 +98,17 @@ class TruffleRubyBootstrapLauncherBuildTask(mx.BuildTask):
         java = mx.get_jdk().java
         classpath_deps = [dep for dep in self.subject.buildDependencies if isinstance(dep, mx.ClasspathDependency)]
         jvm_args = [pipes.quote(arg) for arg in mx.get_runtime_jvm_args(classpath_deps)]
-        jvm_args.append('-Dorg.graalvm.language.ruby.home=' + root)
+        jvm_args.append(f'-Dorg.graalvm.language.ruby.home={root}')
         main_class = 'org.truffleruby.launcher.RubyLauncher'
         ruby_options = [
             '--experimental-options',
             '--building-core-cexts',
-            '--platform-native-interrupt=false', # no librubysignal in the ruby home yet
-            '--launcher=' + result,
+            '--platform-native-interrupt=false',
+            f'--launcher={result}',
             '--disable-gems',
             '--disable-rubyopt',
         ]
+
         command = [java] + jvm_args + [main_class] + ruby_options + ['"$@"']
         return "#!/usr/bin/env bash\n" + "exec " + " ".join(command) + "\n"
 
@@ -143,15 +141,14 @@ def ruby_check_heap_dump(input_args, out=None):
         # rerun once with heap dumping enabled
         out = mx.OutputCapture()
         ruby_check_heap_dump(["--keep-dump"] + input_args, out=out)
-        path = out.data.strip().partition("Dump file:")[2].strip()
-        if path:
+        if path := out.data.strip().partition("Dump file:")[2].strip():
             save_path = os.path.join(root, "dumps", "leak_test")
             try:
                 os.makedirs(save_path)
             except OSError:
                 pass
             dest = shutil.copy(path, save_path) # pylint: disable=assignment-from-no-return
-            print("Heapdump file kept in " + dest)
+            print(f"Heapdump file kept in {dest}")
             raise Exception("heap dump check failed")
     else:
         print("FAILED")

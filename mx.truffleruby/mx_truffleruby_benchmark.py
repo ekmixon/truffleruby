@@ -227,7 +227,7 @@ class TimeBenchmarkSuite(MetricsBenchmarkSuite):
         jt(['metrics', 'time', '--json'] + metrics_benchmarks[benchmark] + bmSuiteArgs, out=out)
 
         lines = [line for line in out.data.split('\n') if len(line) > 0]
-        mx.log('\n'.join(lines[0:-1]))
+        mx.log('\n'.join(lines[:-1]))
 
         json_data = lines[-1]
         mx.log('JSON:')
@@ -284,10 +284,7 @@ class AllBenchmarksBenchmarkSuite(RubyBenchmarkSuite):
             arguments.extend(['--simple', '--iterations', '--elapsed'])
             time = self.time()
             if isinstance(time, dict):
-                if benchmark in time:
-                    time = str(time[benchmark])
-                else:
-                    time = str(time['default'])
+                time = str(time[benchmark]) if benchmark in time else str(time['default'])
             else:
                 time = str(self.time())
             arguments.extend(['--time', time])
@@ -295,9 +292,16 @@ class AllBenchmarksBenchmarkSuite(RubyBenchmarkSuite):
             iterations_config = self.config()['iterations'][benchmark]
             fixed_iterations = sorted(iterations_config.keys())
             fixed_iterations_arg = ','.join([str(i) for i in fixed_iterations])
-            arguments.extend(['--iterations', '--elapsed', '--ips'])
-            arguments.extend(['--fixed-iterations'])
-            arguments.extend([fixed_iterations_arg])
+            arguments.extend(
+                [
+                    '--iterations',
+                    '--elapsed',
+                    '--ips',
+                    '--fixed-iterations',
+                    fixed_iterations_arg,
+                ]
+            )
+
             if iterations_config != {1:'single-shot'}:
                 # single-shot benchmarks use subprocesses so startup is already included
                 arguments.extend(['--start-time', 'START_TIME_SET_BY_JT_BENCHMARK'])
@@ -310,7 +314,7 @@ class AllBenchmarksBenchmarkSuite(RubyBenchmarkSuite):
         else:
             benchmark_file = benchmark
             benchmark_names = []
-        arguments.extend(['bench/' + directory + '/' + benchmark_file + '.rb'])
+        arguments.extend([f'bench/{directory}/{benchmark_file}.rb'])
         arguments.extend(benchmark_names)
         arguments.extend(bmSuiteArgs)
         out = mx.OutputCapture()
@@ -584,7 +588,14 @@ class MicroBenchmarkSuite(AllBenchmarksBenchmarkSuite):
                     out = mx.OutputCapture()
                     jt(['benchmark', 'list', benchmark_file], out=out)
                     benchmark_file_from_micro_dir = benchmark_file[len(micro_dir)+1:-3]
-                    benchmarks.extend([benchmark_file_from_micro_dir + ':' + b.strip() for b in out.data.split('\n') if len(b.strip()) > 0])
+                    benchmarks.extend(
+                        [
+                            f'{benchmark_file_from_micro_dir}:{b.strip()}'
+                            for b in out.data.split('\n')
+                            if len(b.strip()) > 0
+                        ]
+                    )
+
         return benchmarks
 
     def time(self):
@@ -627,7 +638,7 @@ class ServerBenchmarkSuite(RubyBenchmarkSuite):
         arguments = ['ruby']
         if not bmSuiteArgs:
             arguments.extend(['--check-compilation'])
-        arguments.extend(['bench/servers/' + benchmark + '.rb'])
+        arguments.extend([f'bench/servers/{benchmark}.rb'])
 
         server = BackgroundJT(arguments + bmSuiteArgs)
 
@@ -638,7 +649,7 @@ class ServerBenchmarkSuite(RubyBenchmarkSuite):
                     ['ruby', 'bench/servers/harness.rb', str(server_benchmark_time)],
                     out=out,
                     nonZeroIsFatal=False) == 0 and server.is_running():
-                samples = [float(s) for s in out.data.split('\n')[0:-1]]
+                samples = [float(s) for s in out.data.split('\n')[:-1]]
                 mx.log(samples)
                 half_samples = len(samples) // 2
                 used_samples = samples[len(samples)-half_samples-1:]
